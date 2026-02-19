@@ -6,15 +6,24 @@ import { analyzeAndPropose, classifyEmails } from "@/lib/scheduling-ai";
 import { UserPreferences, DEFAULT_PREFERENCES } from "@/lib/types";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
   if (!session || !(session as any).accessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const apiKey = request.headers.get("x-anthropic-key") || undefined;
   const threads = await getRecentThreads((session as any).accessToken);
-  const classified = await classifyEmails(threads);
-  return NextResponse.json(classified);
+
+  try {
+    const classified = await classifyEmails(threads, apiKey);
+    return NextResponse.json(classified);
+  } catch {
+    // If no API key, return threads unclassified — user can still see emails
+    return NextResponse.json(
+      threads.map((t) => ({ ...t, isSchedulingRelated: true })),
+    );
+  }
 }
 
 export async function POST(request: Request) {

@@ -6,13 +6,18 @@ import {
   SchedulingProposal,
 } from "./types";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+function getClient(apiKey?: string): Anthropic {
+  const key = apiKey || process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error("No Anthropic API key provided. Add one in Preferences.");
+  return new Anthropic({ apiKey: key });
+}
 
 export async function analyzeAndPropose(
   email: EmailThread,
   events: CalendarEvent[],
   prefs: UserPreferences,
 ): Promise<SchedulingProposal> {
+  const client = getClient(prefs.anthropicApiKey);
   const eventsContext = events
     .map((e) => `- ${e.summary}: ${e.start} to ${e.end}`)
     .join("\n");
@@ -81,9 +86,11 @@ Respond in this exact JSON format (no markdown, no code fences):
 
 export async function classifyEmails(
   emails: EmailThread[],
+  apiKey?: string,
 ): Promise<EmailThread[]> {
   if (emails.length === 0) return [];
 
+  const client = getClient(apiKey);
   const emailSummaries = emails
     .map(
       (e, i) =>

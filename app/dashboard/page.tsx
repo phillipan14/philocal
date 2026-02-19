@@ -31,9 +31,14 @@ export default function Dashboard() {
     if (status !== "authenticated") return;
 
     async function load() {
+      const prefs = getPreferences();
+      const headers: Record<string, string> = {};
+      if (prefs.anthropicApiKey) {
+        headers["x-anthropic-key"] = prefs.anthropicApiKey;
+      }
       const [calRes, emailRes] = await Promise.all([
         fetch("/api/calendar"),
-        fetch("/api/schedule"),
+        fetch("/api/schedule", { headers }),
       ]);
       if (calRes.ok) setEvents(await calRes.json());
       if (emailRes.ok) {

@@ -55,6 +55,7 @@ export interface UserPreferences {
   bufferMinutes: number;
   defaultDuration: number;
   defaultLocation: string;
+  anthropicApiKey: string;
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -64,4 +65,5 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   bufferMinutes: 15,
   defaultDuration: 30,
   defaultLocation: "Google Meet",
+  anthropicApiKey: "",
 };

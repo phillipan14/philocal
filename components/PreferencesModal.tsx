@@ -116,6 +116,32 @@ export default function PreferencesModal({ onClose }: PreferencesModalProps) {
               placeholder="Google Meet"
             />
           </div>
+
+          <div>
+            <label className="text-xs text-[var(--text-secondary)] block mb-1">
+              Anthropic API Key
+            </label>
+            <input
+              type="password"
+              value={prefs.anthropicApiKey}
+              onChange={(e) =>
+                setPrefs({ ...prefs, anthropicApiKey: e.target.value })
+              }
+              placeholder="sk-ant-..."
+            />
+            <p className="text-xs text-[var(--text-tertiary)] mt-1">
+              Get yours at{" "}
+              <a
+                href="https://console.anthropic.com/settings/keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--accent)] hover:underline"
+              >
+                console.anthropic.com
+              </a>
+              . Stored locally, never sent to our servers.
+            </p>
+          </div>
         </div>
 
         <div className="flex gap-3 mt-6">
