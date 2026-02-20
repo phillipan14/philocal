@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
@@ -8,20 +8,71 @@ import {
   EmailThread,
   SchedulingProposal,
   ActivityItem,
+  ConversationState,
+  ConversationStatus,
 } from "@/lib/types";
 import { getPreferences } from "@/lib/preferences";
 import DashboardHeader from "@/components/DashboardHeader";
 import CalendarPreview from "@/components/CalendarPreview";
 import PreferencesModal from "@/components/PreferencesModal";
 
+const POLL_INTERVAL = 30_000;
+
+type EnrichedThread = EmailThread & { conversationState: ConversationState | null };
+
 export default function Dashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [emails, setEmails] = useState<EmailThread[]>([]);
+  const [emails, setEmails] = useState<EnrichedThread[]>([]);
+  const [conversations, setConversations] = useState<Record<string, ConversationState>>({});
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPreferences, setShowPreferences] = useState(false);
+  const [autoMode, setAutoMode] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchData = useCallback(async () => {
+    const [calRes, emailRes] = await Promise.all([
+      fetch("/api/calendar"),
+      fetch("/api/schedule"),
+    ]);
+    if (calRes.ok) setEvents(await calRes.json());
+    if (emailRes.ok) {
+      const data: EnrichedThread[] = await emailRes.json();
+      setEmails(data);
+      // Build conversations map from enriched data
+      const convMap: Record<string, ConversationState> = {};
+      for (const t of data) {
+        if (t.conversationState) convMap[t.threadId] = t.conversationState;
+      }
+      setConversations((prev) => ({ ...prev, ...convMap }));
+    }
+  }, []);
+
+  const triggerProcess = useCallback(async () => {
+    setProcessing(true);
+    try {
+      const prefs = getPreferences();
+      await fetch("/api/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferences: prefs }),
+      });
+      // Refresh conversation states
+      const convRes = await fetch("/api/process");
+      if (convRes.ok) {
+        const convData = await convRes.json();
+        setConversations(convData);
+      }
+      // Refresh thread list
+      await fetchData();
+    } catch {
+      // Silently handle — will retry on next poll
+    }
+    setProcessing(false);
+  }, [fetchData]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -31,18 +82,26 @@ export default function Dashboard() {
     if (status !== "authenticated") return;
 
     async function load() {
-      const [calRes, emailRes] = await Promise.all([
-        fetch("/api/calendar"),
-        fetch("/api/schedule"),
-      ]);
-      if (calRes.ok) setEvents(await calRes.json());
-      if (emailRes.ok) {
-        setEmails(await emailRes.json());
-      }
+      await fetchData();
       setLoading(false);
     }
     load();
-  }, [status, router]);
+  }, [status, router, fetchData]);
+
+  // Polling for auto-mode
+  useEffect(() => {
+    if (autoMode) {
+      // Trigger immediately on enable
+      triggerProcess();
+      pollRef.current = setInterval(triggerProcess, POLL_INTERVAL);
+    } else if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [autoMode, triggerProcess]);
 
   if (status === "loading" || loading) {
     return (
@@ -61,27 +120,75 @@ export default function Dashboard() {
     setActivities((prev) => [item, ...prev]);
   }
 
+  // Compute stats
+  const convList = Object.values(conversations);
+  const activeStatuses: ConversationStatus[] = ["new", "proposing", "awaiting_reply", "processing_reply", "re_proposing", "confirmed"];
+  const activeCount = convList.filter((c) => activeStatuses.includes(c.status)).length;
+  const awaitingCount = convList.filter((c) => c.status === "awaiting_reply").length;
+  const bookedCount = convList.filter((c) => c.status === "booked").length + activities.filter((a) => a.type === "booked").length;
+
+  // Separate emails into those with active conversations and those without
+  const conversationThreads = emails.filter(
+    (e) => conversations[e.threadId] && conversations[e.threadId].status !== "new",
+  );
+  const manualThreads = emails.filter(
+    (e) => !conversations[e.threadId] || conversations[e.threadId].status === "new",
+  );
+
   return (
     <main className="relative z-10 mx-auto max-w-4xl px-5 sm:px-8 py-10 sm:py-14">
       <DashboardHeader
         userName={session?.user?.name?.split(" ")[0] || "friend"}
         emailCount={emails.length}
-        bookedCount={activities.filter((a) => a.type === "booked").length}
+        bookedCount={bookedCount}
+        activeCount={activeCount}
+        awaitingCount={awaitingCount}
+        autoMode={autoMode}
+        processing={processing}
         onPreferences={() => setShowPreferences(true)}
         onSignOut={() => signOut({ callbackUrl: "/" })}
+        onToggleAutoMode={() => setAutoMode((v) => !v)}
+        onProcessNow={triggerProcess}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-10">
-        {/* Main column — Scheduling requests */}
+        {/* Main column */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Active conversations (auto-processed) */}
+          {conversationThreads.length > 0 && (
+            <>
+              <h2
+                className="text-xl font-normal text-[var(--text-primary)]"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                Active Conversations
+              </h2>
+              <div className="space-y-4">
+                {conversationThreads.map((email, i) => (
+                  <div
+                    key={email.id}
+                    className={`animate-in delay-${Math.min(i + 1, 5)}`}
+                  >
+                    <ConversationCard
+                      email={email}
+                      conversation={conversations[email.threadId]}
+                      onRePropose={triggerProcess}
+                    />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Manual queue (not yet processed or auto-mode off) */}
           <h2
             className="text-xl font-normal text-[var(--text-primary)]"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            Scheduling Requests
+            {autoMode ? "Pending Requests" : "Scheduling Requests"}
           </h2>
 
-          {emails.length === 0 ? (
+          {manualThreads.length === 0 && conversationThreads.length === 0 ? (
             <div className="card p-10 text-center animate-in">
               <div
                 className="w-16 h-16 rounded-2xl mx-auto mb-5 flex items-center justify-center"
@@ -103,9 +210,9 @@ export default function Dashboard() {
                 on any email thread where you need to schedule a meeting.
               </p>
             </div>
-          ) : (
+          ) : manualThreads.length === 0 ? null : (
             <div className="space-y-4">
-              {emails.map((email, i) => (
+              {manualThreads.map((email, i) => (
                 <div
                   key={email.id}
                   className={`animate-in delay-${Math.min(i + 1, 5)}`}
@@ -183,7 +290,7 @@ export default function Dashboard() {
           >
             Phillip An
           </a>
-          {" "}·{" "}
+          {" "}&middot;{" "}
           <a
             href="https://skylarq.com"
             target="_blank"
@@ -202,13 +309,173 @@ export default function Dashboard() {
   );
 }
 
-/* ─── Email Card ─────────────────────────────────── */
+/* ─── Status Badge ─────────────────────────────── */
+
+const STATUS_CONFIG: Record<ConversationStatus, { label: string; color: string; bg: string }> = {
+  new: { label: "New", color: "var(--text-secondary)", bg: "var(--bg-tertiary)" },
+  proposing: { label: "Proposing", color: "var(--accent)", bg: "var(--accent-soft)" },
+  awaiting_reply: { label: "Awaiting Reply", color: "#9382dc", bg: "rgba(147, 130, 220, 0.1)" },
+  processing_reply: { label: "Processing", color: "var(--accent)", bg: "var(--accent-soft)" },
+  confirmed: { label: "Confirmed", color: "var(--success)", bg: "var(--success-soft)" },
+  booked: { label: "Booked", color: "var(--success)", bg: "var(--success-soft)" },
+  re_proposing: { label: "Re-proposing", color: "var(--warning)", bg: "var(--warning-soft)" },
+  stalled: { label: "Stalled", color: "var(--warning)", bg: "var(--warning-soft)" },
+  error: { label: "Error", color: "#e85d5d", bg: "rgba(232, 93, 93, 0.1)" },
+};
+
+function StatusBadge({ status }: { status: ConversationStatus }) {
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.new;
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+      style={{ background: cfg.bg, color: cfg.color }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: cfg.color }} />
+      {cfg.label}
+    </span>
+  );
+}
+
+/* ─── Conversation Card (auto-processed) ─────── */
+
+function ConversationCard({
+  email,
+  conversation,
+  onRePropose,
+}: {
+  email: EnrichedThread;
+  conversation: ConversationState;
+  onRePropose: () => void;
+}) {
+  const isTerminal = conversation.status === "booked" || conversation.status === "stalled";
+
+  return (
+    <div
+      className="card overflow-hidden"
+      style={
+        conversation.status === "booked"
+          ? { borderColor: "var(--success)", borderWidth: "1px" }
+          : undefined
+      }
+    >
+      <div className="p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-semibold shrink-0"
+                style={{
+                  background: "var(--accent-soft)",
+                  color: "var(--accent)",
+                }}
+              >
+                {conversation.senderName.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium truncate">{conversation.senderName}</p>
+                  <StatusBadge status={conversation.status} />
+                </div>
+                <p className="text-xs text-[var(--text-tertiary)] truncate">
+                  {conversation.senderEmail}
+                </p>
+              </div>
+            </div>
+            <h4 className="font-medium text-base leading-snug mb-1.5">
+              {conversation.subject || email.subject}
+            </h4>
+            {conversation.meetingTitle && conversation.meetingTitle !== conversation.subject && (
+              <p className="text-sm text-[var(--text-secondary)] mb-1">
+                {conversation.meetingTitle}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Proposed slots */}
+        {conversation.status === "awaiting_reply" && conversation.proposedSlots.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-medium text-[var(--text-tertiary)] mb-2">
+              Proposed times (waiting for reply)
+            </p>
+            <div className="space-y-1.5">
+              {conversation.proposedSlots.map((slot, i) => (
+                <div
+                  key={i}
+                  className="px-3 py-2 rounded-lg text-sm text-[var(--text-secondary)]"
+                  style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)" }}
+                >
+                  {slot.label}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Booked slot */}
+        {conversation.status === "booked" && conversation.selectedSlot && (
+          <div className="mt-4 flex items-center gap-3">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: "var(--success-soft)" }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-medium">{conversation.selectedSlot.label}</p>
+              {conversation.calendarEventLink && (
+                <a
+                  href={conversation.calendarEventLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-[var(--accent)] hover:underline"
+                >
+                  View in Calendar
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Error */}
+        {conversation.status === "error" && conversation.errorMessage && (
+          <p className="mt-3 text-sm text-[#e85d5d]">{conversation.errorMessage}</p>
+        )}
+
+        {/* Stalled — manual re-propose */}
+        {conversation.status === "stalled" && (
+          <div className="mt-4">
+            <p className="text-sm text-[var(--text-secondary)] mb-2">
+              {conversation.errorMessage || "Could not reach agreement after multiple attempts."}
+            </p>
+            <button onClick={onRePropose} className="btn-secondary text-sm">
+              Re-process
+            </button>
+          </div>
+        )}
+
+        {/* Meta info */}
+        <div className="mt-4 flex items-center gap-4 text-xs text-[var(--text-tertiary)]">
+          <span>Attempt {conversation.attempts}</span>
+          <span>&middot;</span>
+          <span>{conversation.messageCount} messages</span>
+          <span>&middot;</span>
+          <span>Updated {new Date(conversation.updatedAt).toLocaleTimeString()}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Email Card (manual flow, preserved) ────── */
 
 function EmailCard({
   email,
   onBooked,
 }: {
-  email: EmailThread;
+  email: EnrichedThread;
   onBooked: (item: ActivityItem) => void;
 }) {
   const [proposal, setProposal] = useState<SchedulingProposal | null>(null);

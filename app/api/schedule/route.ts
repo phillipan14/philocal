@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { getSchedulingThreads, getThreadDetails } from "@/lib/agentmail";
 import { getEvents } from "@/lib/google-calendar";
 import { analyzeAndPropose } from "@/lib/scheduling-ai";
+import { getAllConversations } from "@/lib/conversation-store";
 import { UserPreferences, DEFAULT_PREFERENCES } from "@/lib/types";
 import { NextResponse } from "next/server";
 
@@ -12,8 +13,18 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const threads = await getSchedulingThreads();
-  return NextResponse.json(threads);
+  const [threads, conversations] = await Promise.all([
+    getSchedulingThreads(),
+    getAllConversations(),
+  ]);
+
+  // Enrich threads with conversation state
+  const enriched = threads.map((t) => ({
+    ...t,
+    conversationState: conversations[t.threadId] ?? null,
+  }));
+
+  return NextResponse.json(enriched);
 }
 
 export async function POST(request: Request) {

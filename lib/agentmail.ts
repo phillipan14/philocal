@@ -1,5 +1,5 @@
 import { AgentMailClient } from "agentmail";
-import { EmailThread } from "./types";
+import { EmailThread, ThreadMessage } from "./types";
 
 const client = new AgentMailClient({
   apiKey: process.env.AGENTMAIL_API_KEY,
@@ -95,4 +95,50 @@ export async function getThreadDetails(
     isSchedulingRelated: true,
     source: "agentmail",
   };
+}
+
+export async function getThreadWithMessages(
+  threadId: string,
+): Promise<{ thread: EmailThread; messages: ThreadMessage[] } | null> {
+  const thread = await client.inboxes.threads.get(INBOX_ID, threadId);
+  if (!thread.messages || thread.messages.length === 0) return null;
+
+  const firstMessage = thread.messages[0];
+  const sender = firstMessage.from
+    ? parseSender(firstMessage.from)
+    : { name: "Unknown", email: "unknown" };
+
+  const emailThread: EmailThread = {
+    id: thread.threadId,
+    threadId: thread.threadId,
+    subject: thread.subject || "(No subject)",
+    from: sender.name,
+    fromEmail: sender.email,
+    snippet: thread.preview || "",
+    body: (firstMessage.extractedText || firstMessage.text || thread.preview || "").slice(0, 2000),
+    date: thread.timestamp instanceof Date ? thread.timestamp.toISOString() : String(thread.timestamp),
+    isSchedulingRelated: true,
+    source: "agentmail",
+  };
+
+  const messages: ThreadMessage[] = thread.messages.map((msg: any) => {
+    const s = msg.from ? parseSender(msg.from) : { name: "Unknown", email: "unknown" };
+    return {
+      messageId: msg.messageId || "",
+      from: s.name,
+      fromEmail: s.email,
+      to: Array.isArray(msg.to) ? msg.to : msg.to ? [msg.to] : [],
+      text: msg.extractedText || msg.text || "",
+      timestamp: msg.timestamp instanceof Date ? msg.timestamp.toISOString() : String(msg.timestamp || ""),
+    };
+  });
+
+  return { thread: emailThread, messages };
+}
+
+export async function getThreadMessageCount(
+  threadId: string,
+): Promise<number> {
+  const thread = await client.inboxes.threads.get(INBOX_ID, threadId);
+  return thread.messages?.length ?? 0;
 }

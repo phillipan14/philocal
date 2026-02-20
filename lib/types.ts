@@ -73,3 +73,59 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   openaiApiKey: "",
   aiProvider: "openai",
 };
+
+/* ─── Multi-turn conversation types ─────────── */
+
+export type ConversationStatus =
+  | "new"
+  | "proposing"
+  | "awaiting_reply"
+  | "processing_reply"
+  | "confirmed"
+  | "booked"
+  | "re_proposing"
+  | "stalled"
+  | "error";
+
+export interface ConversationState {
+  threadId: string;
+  status: ConversationStatus;
+  senderName: string;
+  senderEmail: string;
+  subject: string;
+  proposedSlots: TimeSlot[];
+  selectedSlot: TimeSlot | null;
+  meetingTitle: string;
+  participants: string[];
+  lastMessageId: string | null;
+  messageCount: number;
+  attempts: number;
+  previouslyRejectedSlots: TimeSlot[];
+  calendarEventId: string | null;
+  calendarEventLink: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationStore {
+  conversations: Record<string, ConversationState>;
+  lastProcessedAt: string | null;
+}
+
+export interface ReplyAnalysis {
+  type: "slot_selected" | "rejection" | "counter_proposal" | "unclear";
+  selectedSlotIndex: number | null;
+  counterProposalText: string | null;
+  confidence: number;
+  reasoning: string;
+}
+
+export interface ThreadMessage {
+  messageId: string;
+  from: string;
+  fromEmail: string;
+  to: string[];
+  text: string;
+  timestamp: string;
+}

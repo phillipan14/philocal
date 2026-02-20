@@ -6,8 +6,14 @@ interface DashboardHeaderProps {
   userName: string;
   emailCount: number;
   bookedCount: number;
+  activeCount: number;
+  awaitingCount: number;
+  autoMode: boolean;
+  processing: boolean;
   onPreferences: () => void;
   onSignOut: () => void;
+  onToggleAutoMode: () => void;
+  onProcessNow: () => void;
 }
 
 const PHILOCAL_EMAIL = "philocal@agentmail.to";
@@ -16,8 +22,14 @@ export default function DashboardHeader({
   userName,
   emailCount,
   bookedCount,
+  activeCount,
+  awaitingCount,
+  autoMode,
+  processing,
   onPreferences,
   onSignOut,
+  onToggleAutoMode,
+  onProcessNow,
 }: DashboardHeaderProps) {
   const [copied, setCopied] = useState(false);
 
@@ -40,20 +52,49 @@ export default function DashboardHeader({
           </h1>
         </div>
         <div className="flex items-center gap-3">
+          {/* Auto-mode toggle */}
           <button
-            onClick={onPreferences}
+            onClick={onToggleAutoMode}
+            className="btn-secondary text-sm flex items-center gap-2"
+            style={autoMode ? { borderColor: "var(--success)", color: "var(--success)" } : {}}
+          >
+            <div
+              className="w-2 h-2 rounded-full"
+              style={{ background: autoMode ? "var(--success)" : "var(--text-tertiary)" }}
+            />
+            {autoMode ? "Auto" : "Manual"}
+          </button>
+          {/* Process now button */}
+          <button
+            onClick={onProcessNow}
+            disabled={processing}
             className="btn-secondary text-sm"
           >
+            {processing ? (
+              <span className="flex items-center gap-2">
+                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+                Processing...
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                Process
+              </span>
+            )}
+          </button>
+          <button onClick={onPreferences} className="btn-secondary text-sm">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3"/>
               <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
             </svg>
             Settings
           </button>
-          <button
-            onClick={onSignOut}
-            className="btn-secondary text-sm"
-          >
+          <button onClick={onSignOut} className="btn-secondary text-sm">
             Sign out
           </button>
         </div>
@@ -80,8 +121,9 @@ export default function DashboardHeader({
               Your scheduling address
             </p>
             <p className="text-[var(--text-secondary)] text-sm leading-relaxed max-w-md">
-              CC this email on any thread where you need to schedule a meeting.
-              PhiloCal reads it and proposes times for you.
+              {autoMode
+                ? "Auto-mode is ON. PhiloCal will automatically propose times and book meetings."
+                : "CC this email on any thread where you need to schedule a meeting."}
             </p>
           </div>
           <div className="flex items-center gap-3 shrink-0">
@@ -121,7 +163,7 @@ export default function DashboardHeader({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="card p-5 flex items-center gap-4">
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
@@ -134,7 +176,36 @@ export default function DashboardHeader({
           </div>
           <div>
             <p className="text-2xl font-semibold tabular-nums">{emailCount}</p>
-            <p className="text-sm text-[var(--text-tertiary)]">Scheduling requests</p>
+            <p className="text-sm text-[var(--text-tertiary)]">Requests</p>
+          </div>
+        </div>
+        <div className="card p-5 flex items-center gap-4">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: "var(--accent-soft)" }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div>
+            <p className="text-2xl font-semibold tabular-nums">{activeCount}</p>
+            <p className="text-sm text-[var(--text-tertiary)]">Active</p>
+          </div>
+        </div>
+        <div className="card p-5 flex items-center gap-4">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: "rgba(147, 130, 220, 0.1)" }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9382dc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <div>
+            <p className="text-2xl font-semibold tabular-nums">{awaitingCount}</p>
+            <p className="text-sm text-[var(--text-tertiary)]">Awaiting</p>
           </div>
         </div>
         <div className="card p-5 flex items-center gap-4">
@@ -149,7 +220,7 @@ export default function DashboardHeader({
           </div>
           <div>
             <p className="text-2xl font-semibold tabular-nums">{bookedCount}</p>
-            <p className="text-sm text-[var(--text-tertiary)]">Meetings booked</p>
+            <p className="text-sm text-[var(--text-tertiary)]">Booked</p>
           </div>
         </div>
       </div>

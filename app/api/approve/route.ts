@@ -4,6 +4,7 @@ import { createEvent } from "@/lib/google-calendar";
 import { replyToThread } from "@/lib/agentmail";
 import { sendReply } from "@/lib/gmail";
 import { buildSchedulingReplyHtml, htmlToPlainText } from "@/lib/email-template";
+import { updateStatus } from "@/lib/conversation-store";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
@@ -55,6 +56,13 @@ export async function POST(request: Request) {
       // AgentMail
       await replyToThread(emailThread.threadId, plainBody, htmlBody);
     }
+
+    // Update conversation store
+    await updateStatus(emailThread.threadId, "booked", {
+      selectedSlot: selectedSlot,
+      calendarEventId: event.id || null,
+      calendarEventLink: event.htmlLink || null,
+    });
 
     return NextResponse.json({
       success: true,

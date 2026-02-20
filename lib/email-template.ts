@@ -60,6 +60,53 @@ export function buildSchedulingReplyHtml({
 </html>`;
 }
 
+export function buildConfirmationHtml(
+  recipientName: string,
+  slot: TimeSlot,
+  meetingTitle: string,
+  senderName = "Phillip",
+): string {
+  return buildSchedulingReplyHtml({
+    recipientName,
+    greeting: `Great news! I've booked us in for ${slot.label}.`,
+    context: "You should receive a calendar invite shortly.",
+    slots: [slot],
+    closing: "Looking forward to it!",
+    senderName,
+    slotsHeader: "Meeting details:",
+  });
+}
+
+export function buildReProposalHtml(
+  recipientName: string,
+  slots: TimeSlot[],
+  senderName = "Phillip",
+): string {
+  return buildSchedulingReplyHtml({
+    recipientName,
+    greeting: "No worries! Here are some alternative times that work for me:",
+    context: "",
+    slots,
+    closing: "Let me know if any of these work better, or feel free to suggest a time!",
+    senderName,
+  });
+}
+
+export function buildClarificationHtml(
+  recipientName: string,
+  slots: TimeSlot[],
+  senderName = "Phillip",
+): string {
+  return buildSchedulingReplyHtml({
+    recipientName,
+    greeting: "Just following up on scheduling! Would any of these times work for you?",
+    context: "",
+    slots,
+    closing: "Just reply with the option that works best, or let me know if you'd prefer different times.",
+    senderName,
+  });
+}
+
 /**
  * Converts an HTML email to plain text fallback.
  * Strips tags, keeps structure readable.
