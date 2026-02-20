@@ -1,7 +1,9 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { createEvent } from "@/lib/google-calendar";
+import { replyToThread } from "@/lib/agentmail";
 import { sendReply } from "@/lib/gmail";
+import { buildSchedulingReplyHtml, htmlToPlainText } from "@/lib/email-template";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
@@ -10,28 +12,58 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { proposal, selectedSlot, emailThread } = await request.json();
-  const accessToken = (session as any).accessToken;
+  try {
+    const { proposal, selectedSlot, emailThread, source } = await request.json();
+    const accessToken = (session as any).accessToken;
 
-  const event = await createEvent(
-    accessToken,
-    proposal.meetingTitle,
-    selectedSlot.start,
-    selectedSlot.end,
-    proposal.participants,
-  );
+    // Build a confirmation HTML email for the selected slot
+    const recipientName = emailThread.from?.split(" ")[0] || "there";
+    const confirmHtml = buildSchedulingReplyHtml({
+      recipientName,
+      greeting: `Great news! I've booked us in for ${selectedSlot.label}.`,
+      context: "You should receive a calendar invite shortly.",
+      slots: [selectedSlot],
+      closing: "Looking forward to it!",
+      senderName: "Phillip",
+    });
+    const confirmPlain = htmlToPlainText(confirmHtml);
 
-  await sendReply(
-    accessToken,
-    emailThread.threadId,
-    emailThread.fromEmail,
-    emailThread.subject,
-    proposal.draftReply,
-  );
+    // Use the proposal's HTML reply (with all 3 slots) if this is the initial send,
+    // or the confirmation HTML if a slot was selected
+    const htmlBody = proposal.htmlReply || confirmHtml;
+    const plainBody = proposal.draftReply || confirmPlain;
 
-  return NextResponse.json({
-    success: true,
-    event,
-    message: "Meeting booked and reply sent.",
-  });
+    // Create the calendar event
+    const event = await createEvent(
+      accessToken,
+      proposal.meetingTitle,
+      selectedSlot.start,
+      selectedSlot.end,
+      proposal.participants,
+    );
+
+    // Send the reply via the appropriate channel
+    if (source === "gmail") {
+      await sendReply(
+        accessToken,
+        emailThread.threadId,
+        emailThread.fromEmail,
+        emailThread.subject,
+        plainBody,
+        htmlBody,
+      );
+    } else {
+      // AgentMail
+      await replyToThread(emailThread.threadId, plainBody, htmlBody);
+    }
+
+    return NextResponse.json({
+      success: true,
+      event,
+      message: "Meeting booked and reply sent.",
+    });
+  } catch (err: any) {
+    const message = err?.message || "Failed to book meeting";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

@@ -18,6 +18,7 @@ export interface EmailThread {
   body: string;
   date: string;
   isSchedulingRelated?: boolean;
+  source?: "gmail" | "agentmail";
 }
 
 export interface SchedulingProposal {
@@ -26,6 +27,7 @@ export interface SchedulingProposal {
   intent: "schedule_meeting" | "reschedule" | "cancel" | "unclear";
   proposedSlots: TimeSlot[];
   draftReply: string;
+  htmlReply?: string;
   meetingDuration: number;
   meetingTitle: string;
   participants: string[];
@@ -56,6 +58,8 @@ export interface UserPreferences {
   defaultDuration: number;
   defaultLocation: string;
   anthropicApiKey: string;
+  openaiApiKey: string;
+  aiProvider: "anthropic" | "openai";
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -66,4 +70,6 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   defaultDuration: 30,
   defaultLocation: "Google Meet",
   anthropicApiKey: "",
+  openaiApiKey: "",
+  aiProvider: "openai",
 };

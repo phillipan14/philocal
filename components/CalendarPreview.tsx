@@ -1,127 +1,144 @@
 "use client";
 
 import { CalendarEvent, TimeSlot } from "@/lib/types";
-import { Fragment } from "react";
 
 interface CalendarPreviewProps {
   events: CalendarEvent[];
   proposedSlots?: TimeSlot[];
 }
 
-function getDayLabels(): { label: string; date: Date }[] {
-  const days = [];
-  const now = new Date();
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(now);
-    d.setDate(d.getDate() + i);
-    days.push({
-      label: d.toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-      }),
-      date: d,
+function groupEventsByDay(events: CalendarEvent[]): Map<string, CalendarEvent[]> {
+  const grouped = new Map<string, CalendarEvent[]>();
+  const sorted = [...events].sort(
+    (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+  );
+
+  for (const event of sorted) {
+    const dateKey = new Date(event.start).toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
     });
+    if (!grouped.has(dateKey)) grouped.set(dateKey, []);
+    grouped.get(dateKey)!.push(event);
   }
-  return days;
+  return grouped;
 }
 
-function getHourPosition(dateStr: string): number {
-  const d = new Date(dateStr);
-  return d.getHours() + d.getMinutes() / 60;
+function formatTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
-const START_HOUR = 8;
-const END_HOUR = 20;
-const HOURS = Array.from(
-  { length: END_HOUR - START_HOUR },
-  (_, i) => START_HOUR + i,
-);
+function isToday(dateStr: string): boolean {
+  return new Date(dateStr).toDateString() === new Date().toDateString();
+}
 
 export default function CalendarPreview({
   events,
   proposedSlots = [],
 }: CalendarPreviewProps) {
-  const days = getDayLabels();
+  const now = new Date();
+  const threeDaysOut = new Date(now.getTime() + 3 * 86400000);
 
-  function getEventsForDay(date: Date) {
-    return events.filter((e) => {
-      const eventDate = new Date(e.start);
-      return eventDate.toDateString() === date.toDateString();
-    });
-  }
+  const upcomingEvents = events.filter((e) => {
+    const d = new Date(e.start);
+    return d >= now && d <= threeDaysOut;
+  });
 
-  function getProposedForDay(date: Date) {
-    return proposedSlots.filter((s) => {
-      const slotDate = new Date(s.start);
-      return slotDate.toDateString() === date.toDateString();
-    });
-  }
+  const grouped = groupEventsByDay(upcomingEvents);
 
   return (
-    <div className="card p-4 overflow-hidden">
-      <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-3 uppercase tracking-wider">
-        This Week
-      </h3>
-      <div className="overflow-x-auto">
-        <div
-          className="grid min-w-[640px]"
-          style={{
-            gridTemplateColumns: "60px repeat(7, 1fr)",
-            gap: "1px",
-            background: "var(--border)",
-          }}
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h3
+          className="text-xl font-normal text-[var(--text-primary)]"
+          style={{ fontFamily: "var(--font-display)" }}
         >
-          {/* Header row */}
-          <div className="bg-[var(--bg-secondary)] p-2 text-[10px] text-[var(--text-tertiary)]" />
-          {days.map((d) => (
-            <div
-              key={d.label}
-              className="bg-[var(--bg-secondary)] p-2 text-center"
-            >
-              <span className="text-[10px] text-[var(--text-tertiary)] font-medium">
-                {d.label}
-              </span>
+          Upcoming
+        </h3>
+        <span className="text-sm text-[var(--text-tertiary)]">
+          Next 3 days
+        </span>
+      </div>
+
+      {upcomingEvents.length === 0 && proposedSlots.length === 0 ? (
+        <div className="card p-8 text-center">
+          <div className="w-12 h-12 rounded-2xl mx-auto mb-4 flex items-center justify-center" style={{ background: "var(--accent-soft)" }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+          </div>
+          <p className="text-[var(--text-secondary)] text-sm mb-1">
+            Calendar is clear
+          </p>
+          <p className="text-[var(--text-tertiary)] text-sm">
+            No events in the next 3 days.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {Array.from(grouped.entries()).map(([dayLabel, dayEvents]) => (
+            <div key={dayLabel}>
+              <div className="flex items-center gap-3 mb-3">
+                {isToday(dayEvents[0].start) && (
+                  <span className="inline-block w-2 h-2 rounded-full bg-[var(--accent)]" />
+                )}
+                <p className="text-sm font-medium text-[var(--text-secondary)]">
+                  {isToday(dayEvents[0].start) ? "Today" : dayLabel}
+                </p>
+              </div>
+              <div className="space-y-2">
+                {dayEvents.map((event) => (
+                  <div key={event.id} className="calendar-event-item">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {event.summary}
+                        </p>
+                        {event.attendees && event.attendees.length > 0 && (
+                          <p className="text-xs text-[var(--text-tertiary)] mt-0.5 truncate">
+                            {event.attendees.slice(0, 2).join(", ")}
+                            {event.attendees.length > 2 &&
+                              ` +${event.attendees.length - 2}`}
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-xs text-[var(--text-tertiary)] shrink-0 tabular-nums">
+                        {formatTime(event.start)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
 
-          {/* Hour rows */}
-          {HOURS.map((hour) => (
-            <Fragment key={hour}>
-              <div className="bg-[var(--bg-secondary)] p-1 text-right pr-2">
-                <span className="text-[10px] text-[var(--text-tertiary)]">
-                  {hour % 12 || 12}
-                  {hour < 12 ? "a" : "p"}
-                </span>
-              </div>
-              {days.map((d) => {
-                const dayEvents = getEventsForDay(d.date).filter((e) => {
-                  const h = getHourPosition(e.start);
-                  return h >= hour && h < hour + 1;
-                });
-                const dayProposed = getProposedForDay(d.date).filter((s) => {
-                  const h = getHourPosition(s.start);
-                  return h >= hour && h < hour + 1;
-                });
-                return (
-                  <div key={`${d.label}-${hour}`} className="calendar-cell">
-                    {dayEvents.map((e) => (
-                      <div key={e.id} className="calendar-event">
-                        {e.summary}
-                      </div>
-                    ))}
-                    {dayProposed.map((s, i) => (
-                      <div key={i} className="calendar-proposed">
-                        {s.label}
-                      </div>
-                    ))}
+          {proposedSlots.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-[var(--success)] mb-3">
+                Proposed
+              </p>
+              <div className="space-y-2">
+                {proposedSlots.map((slot, i) => (
+                  <div key={i} className="calendar-proposed-item">
+                    <p className="text-sm font-medium">{slot.label}</p>
+                    <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
+                      {formatTime(slot.start)} - {formatTime(slot.end)}
+                    </p>
                   </div>
-                );
-              })}
-            </Fragment>
-          ))}
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

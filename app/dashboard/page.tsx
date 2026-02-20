@@ -31,19 +31,13 @@ export default function Dashboard() {
     if (status !== "authenticated") return;
 
     async function load() {
-      const prefs = getPreferences();
-      const headers: Record<string, string> = {};
-      if (prefs.anthropicApiKey) {
-        headers["x-anthropic-key"] = prefs.anthropicApiKey;
-      }
       const [calRes, emailRes] = await Promise.all([
         fetch("/api/calendar"),
-        fetch("/api/schedule", { headers }),
+        fetch("/api/schedule"),
       ]);
       if (calRes.ok) setEvents(await calRes.json());
       if (emailRes.ok) {
-        const allEmails = await emailRes.json();
-        setEmails(allEmails.filter((e: EmailThread) => e.isSchedulingRelated));
+        setEmails(await emailRes.json());
       }
       setLoading(false);
     }
@@ -52,10 +46,11 @@ export default function Dashboard() {
 
   if (status === "loading" || loading) {
     return (
-      <main className="relative z-10 mx-auto max-w-5xl px-4 py-10">
-        <div className="text-center py-20">
-          <p className="text-[var(--text-secondary)] animate-pulse-soft">
-            Consulting the ancient calendar scrolls...
+      <main className="relative z-10 mx-auto max-w-4xl px-5 sm:px-8 py-12">
+        <div className="py-24 text-center">
+          <div className="w-12 h-12 rounded-2xl mx-auto mb-6 animate-shimmer" />
+          <p className="text-[var(--text-secondary)] text-lg animate-pulse-soft">
+            Loading your schedule...
           </p>
         </div>
       </main>
@@ -67,7 +62,7 @@ export default function Dashboard() {
   }
 
   return (
-    <main className="relative z-10 mx-auto max-w-5xl px-4 py-10">
+    <main className="relative z-10 mx-auto max-w-4xl px-5 sm:px-8 py-10 sm:py-14">
       <DashboardHeader
         userName={session?.user?.name?.split(" ")[0] || "friend"}
         emailCount={emails.length}
@@ -76,70 +71,109 @@ export default function Dashboard() {
         onSignOut={() => signOut({ callbackUrl: "/" })}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Email queue */}
-        <div className="lg:col-span-3 space-y-4">
-          <h3 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-10">
+        {/* Main column — Scheduling requests */}
+        <div className="lg:col-span-2 space-y-6">
+          <h2
+            className="text-xl font-normal text-[var(--text-primary)]"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
             Scheduling Requests
-          </h3>
+          </h2>
+
           {emails.length === 0 ? (
-            <div className="card p-8 text-center">
-              <p className="text-3xl mb-3">&#128172;</p>
-              <p className="text-[var(--text-secondary)] font-medium">
-                Inbox zero? Either nobody wants to meet you, or you&apos;re
-                crushing it.
+            <div className="card p-10 text-center animate-in">
+              <div
+                className="w-16 h-16 rounded-2xl mx-auto mb-5 flex items-center justify-center"
+                style={{ background: "var(--accent-soft)" }}
+              >
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                  <polyline points="22,6 12,13 2,6"/>
+                </svg>
+              </div>
+              <p className="text-lg font-medium text-[var(--text-primary)] mb-2">
+                No requests yet
+              </p>
+              <p className="text-[var(--text-secondary)] text-sm leading-relaxed max-w-sm mx-auto">
+                CC{" "}
+                <span className="text-[var(--accent)] font-medium">
+                  philocal@agentmail.to
+                </span>{" "}
+                on any email thread where you need to schedule a meeting.
               </p>
             </div>
           ) : (
-            emails.map((email) => (
-              <EmailCard
-                key={email.id}
-                email={email}
-                onBooked={addActivity}
-              />
-            ))
+            <div className="space-y-4">
+              {emails.map((email, i) => (
+                <div
+                  key={email.id}
+                  className={`animate-in delay-${Math.min(i + 1, 5)}`}
+                >
+                  <EmailCard email={email} onBooked={addActivity} />
+                </div>
+              ))}
+            </div>
           )}
 
           {/* Activity log */}
-          <h3 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider mt-8">
-            Activity Log
-          </h3>
-          {activities.length === 0 ? (
-            <div className="card p-6 text-center">
-              <p className="text-sm text-[var(--text-tertiary)] italic">
-                No scheduling history yet. Are you sure you have friends?
-              </p>
-            </div>
-          ) : (
-            activities.map((a) => (
-              <div key={a.id} className="card p-4 flex items-center gap-3">
-                <span
-                  className={`badge badge-${a.type === "booked" ? "confirmed" : "pending"}`}
-                >
-                  {a.type}
-                </span>
-                <div>
-                  <p className="text-sm font-medium">{a.title}</p>
-                  <p className="text-xs text-[var(--text-tertiary)]">
-                    {a.description}
-                  </p>
-                </div>
+          {activities.length > 0 && (
+            <div className="mt-10 space-y-4">
+              <h2
+                className="text-xl font-normal text-[var(--text-primary)]"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                Recent Activity
+              </h2>
+              <div className="space-y-3">
+                {activities.map((a) => (
+                  <div
+                    key={a.id}
+                    className="card p-5 flex items-center gap-4 animate-in"
+                  >
+                    <div
+                      className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                      style={{
+                        background:
+                          a.type === "booked"
+                            ? "var(--success-soft)"
+                            : "var(--warning-soft)",
+                      }}
+                    >
+                      {a.type === "booked" ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10"/>
+                          <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{a.title}</p>
+                      <p className="text-sm text-[var(--text-tertiary)] truncate">
+                        {a.description}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))
+            </div>
           )}
         </div>
 
-        {/* Calendar preview */}
-        <div className="lg:col-span-2">
-          <CalendarPreview events={events} />
+        {/* Sidebar — Calendar */}
+        <div className="lg:col-span-1">
+          <div className="lg:sticky lg:top-8">
+            <CalendarPreview events={events} />
+          </div>
         </div>
       </div>
 
-      <footer className="mt-20 text-center text-xs text-[var(--text-tertiary)]">
-        <p className="italic mb-2">
-          &ldquo;Time is an illusion. Meetings are not.&rdquo;
-        </p>
-        <p>
+      <footer className="mt-20 pt-8 border-t border-[var(--border)] text-center">
+        <p className="text-sm text-[var(--text-tertiary)]">
           Built by{" "}
           <a
             href="https://linkedin.com/in/phillipan"
@@ -149,12 +183,12 @@ export default function Dashboard() {
           >
             Phillip An
           </a>
-          {" "}&middot;{" "}
+          {" "}·{" "}
           <a
             href="https://skylarq.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-[var(--text-secondary)] transition-colors"
+            className="text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors"
           >
             Powered by Skylarq
           </a>
@@ -167,6 +201,8 @@ export default function Dashboard() {
     </main>
   );
 }
+
+/* ─── Email Card ─────────────────────────────────── */
 
 function EmailCard({
   email,
@@ -181,9 +217,11 @@ function EmailCard({
   const [proposing, setProposing] = useState(false);
   const [approving, setApproving] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handlePropose() {
     setProposing(true);
+    setError(null);
     const preferences = getPreferences();
 
     const res = await fetch("/api/schedule", {
@@ -195,6 +233,9 @@ function EmailCard({
       const p = await res.json();
       setProposal(p);
       setExpanded(true);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Failed to propose times. Please try again.");
     }
     setProposing(false);
   }
@@ -202,6 +243,7 @@ function EmailCard({
   async function handleApprove() {
     if (!proposal || selectedSlot === null) return;
     setApproving(true);
+    setError(null);
     const res = await fetch("/api/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -209,6 +251,7 @@ function EmailCard({
         proposal,
         selectedSlot: proposal.proposedSlots[selectedSlot],
         emailThread: email,
+        source: email.source || "agentmail",
       }),
     });
     if (res.ok) {
@@ -221,21 +264,32 @@ function EmailCard({
         timestamp: new Date().toISOString(),
         participants: proposal.participants,
       });
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Failed to book meeting. Try signing out and back in.");
     }
     setApproving(false);
   }
 
   if (done) {
     return (
-      <div className="card p-5 border-l-2 border-[var(--success)]">
-        <div className="flex items-center gap-3">
-          <span className="text-lg">&#9989;</span>
+      <div
+        className="card p-6 animate-in-scale"
+        style={{ borderColor: "var(--success)", borderWidth: "1px" }}
+      >
+        <div className="flex items-center gap-4">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: "var(--success-soft)" }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
           <div>
-            <p className="text-sm font-medium">
-              Booked: {proposal?.meetingTitle}
-            </p>
-            <p className="text-xs text-[var(--text-tertiary)]">
-              Another meeting booked. Your calendar weeps.
+            <p className="font-medium">{proposal?.meetingTitle}</p>
+            <p className="text-sm text-[var(--text-secondary)] mt-0.5">
+              Meeting booked with {email.from}
             </p>
           </div>
         </div>
@@ -244,68 +298,178 @@ function EmailCard({
   }
 
   return (
-    <div className="card p-5 animate-in">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="badge badge-scheduling">Scheduling</span>
-            <span className="text-xs text-[var(--text-tertiary)]">
-              {email.from}
-            </span>
+    <div className="card overflow-hidden">
+      {/* Card header */}
+      <div className="p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            {/* Sender avatar + name */}
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-semibold shrink-0"
+                style={{
+                  background: "var(--accent-soft)",
+                  color: "var(--accent)",
+                }}
+              >
+                {email.from.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{email.from}</p>
+                <p className="text-xs text-[var(--text-tertiary)] truncate">
+                  {email.fromEmail}
+                </p>
+              </div>
+            </div>
+            {/* Subject */}
+            <h4 className="font-medium text-base leading-snug mb-1.5">
+              {email.subject}
+            </h4>
+            {/* Snippet */}
+            <p className="text-sm text-[var(--text-secondary)] line-clamp-2 leading-relaxed">
+              {email.snippet}
+            </p>
           </div>
-          <h4 className="text-sm font-semibold truncate">{email.subject}</h4>
-          <p className="text-xs text-[var(--text-tertiary)] mt-1 line-clamp-2">
-            {email.snippet}
-          </p>
         </div>
-        <button
-          onClick={handlePropose}
-          disabled={proposing || !!proposal}
-          className="btn-primary text-xs shrink-0"
-        >
-          {proposing ? "Thinking..." : proposal ? "Proposed" : "Propose Times"}
-        </button>
+        {/* Action button */}
+        <div className="mt-5">
+          <button
+            onClick={handlePropose}
+            disabled={proposing || !!proposal}
+            className="btn-primary w-full sm:w-auto"
+          >
+            {proposing ? (
+              <span className="flex items-center gap-2">
+                <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+                Finding times...
+              </span>
+            ) : proposal ? (
+              <span className="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Times proposed
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                Propose Times
+              </span>
+            )}
+          </button>
+          {error && (
+            <p className="text-sm mt-3 text-[var(--warning)]">{error}</p>
+          )}
+        </div>
       </div>
 
+      {/* Expanded proposal section */}
       {expanded && proposal && (
-        <div className="mt-4 pt-4 border-t border-[var(--border)]">
-          <p className="text-xs font-medium text-[var(--text-secondary)] mb-2 uppercase tracking-wider">
-            Proposed Time Slots
+        <div
+          className="px-6 pb-6 pt-5 animate-in"
+          style={{
+            borderTop: "1px solid var(--border)",
+            background: "var(--bg-tertiary)",
+          }}
+        >
+          {/* Time slots as large clickable cards */}
+          <p className="text-sm font-medium text-[var(--text-secondary)] mb-3">
+            Pick a time
           </p>
-          <div className="space-y-2">
+          <div className="space-y-2 mb-5">
             {proposal.proposedSlots.map((slot, i) => (
-              <label
+              <button
                 key={i}
-                className={`flex items-center gap-3 card p-3 cursor-pointer ${selectedSlot === i ? "border-[var(--accent)]" : ""}`}
+                onClick={() => setSelectedSlot(i)}
+                className="w-full text-left p-4 rounded-xl transition-all"
+                style={{
+                  background:
+                    selectedSlot === i
+                      ? "var(--accent-soft)"
+                      : "var(--bg-secondary)",
+                  border:
+                    selectedSlot === i
+                      ? "1px solid var(--accent)"
+                      : "1px solid var(--border)",
+                }}
               >
-                <input
-                  type="radio"
-                  name={`slot-${email.id}`}
-                  checked={selectedSlot === i}
-                  onChange={() => setSelectedSlot(i)}
-                  className="accent-[var(--accent)]"
-                />
-                <span className="text-sm">{slot.label}</span>
-              </label>
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors"
+                    style={{
+                      borderColor:
+                        selectedSlot === i
+                          ? "var(--accent)"
+                          : "var(--border-light)",
+                    }}
+                  >
+                    {selectedSlot === i && (
+                      <div
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{ background: "var(--accent)" }}
+                      />
+                    )}
+                  </div>
+                  <span
+                    className="text-sm font-medium"
+                    style={{
+                      color:
+                        selectedSlot === i
+                          ? "var(--text-primary)"
+                          : "var(--text-secondary)",
+                    }}
+                  >
+                    {slot.label}
+                  </span>
+                </div>
+              </button>
             ))}
           </div>
 
-          <div className="mt-3">
-            <p className="text-xs font-medium text-[var(--text-secondary)] mb-1 uppercase tracking-wider">
-              Draft Reply
-            </p>
-            <div className="bg-[var(--bg-tertiary)] rounded-lg p-3 text-xs text-[var(--text-secondary)] whitespace-pre-wrap max-h-32 overflow-y-auto">
-              {proposal.draftReply}
-            </div>
+          {/* Draft reply */}
+          <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">
+            Draft reply
+          </p>
+          <div
+            className="rounded-xl p-4 text-sm text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap max-h-36 overflow-y-auto mb-5"
+            style={{
+              background: "var(--bg-secondary)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            {proposal.draftReply}
           </div>
 
+          {/* Approve button */}
           <button
             onClick={handleApprove}
             disabled={selectedSlot === null || approving}
-            className="btn-primary mt-4 w-full"
+            className="btn-success w-full"
           >
-            {approving ? "Booking..." : "Approve & Send"}
+            {approving ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+                Booking...
+              </span>
+            ) : (
+              <span className="flex items-center justify-center gap-2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Approve &amp; Book Meeting
+              </span>
+            )}
           </button>
+          {error && (
+            <p className="text-sm mt-3 text-[var(--warning)]">{error}</p>
+          )}
         </div>
       )}
     </div>

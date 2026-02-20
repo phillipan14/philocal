@@ -60,6 +60,7 @@ export async function getRecentThreads(
       snippet: detail.data.snippet || "",
       body: bodyText.slice(0, 2000),
       date: getHeader("Date"),
+      source: "gmail",
     });
   }
 
@@ -72,18 +73,46 @@ export async function sendReply(
   to: string,
   subject: string,
   body: string,
+  htmlBody?: string,
 ) {
   const gmail = getGmailClient(accessToken);
 
-  const raw = [
-    `To: ${to}`,
-    `Subject: Re: ${subject}`,
-    `Content-Type: text/plain; charset=utf-8`,
-    `In-Reply-To: ${threadId}`,
-    `References: ${threadId}`,
-    "",
-    body,
-  ].join("\r\n");
+  let raw: string;
+
+  if (htmlBody) {
+    // Send multipart email with both plain text and HTML
+    const boundary = `boundary_${Date.now()}`;
+    raw = [
+      `To: ${to}`,
+      `Subject: Re: ${subject}`,
+      `MIME-Version: 1.0`,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      `In-Reply-To: ${threadId}`,
+      `References: ${threadId}`,
+      "",
+      `--${boundary}`,
+      `Content-Type: text/plain; charset=utf-8`,
+      "",
+      body,
+      "",
+      `--${boundary}`,
+      `Content-Type: text/html; charset=utf-8`,
+      "",
+      htmlBody,
+      "",
+      `--${boundary}--`,
+    ].join("\r\n");
+  } else {
+    raw = [
+      `To: ${to}`,
+      `Subject: Re: ${subject}`,
+      `Content-Type: text/plain; charset=utf-8`,
+      `In-Reply-To: ${threadId}`,
+      `References: ${threadId}`,
+      "",
+      body,
+    ].join("\r\n");
+  }
 
   const encoded = Buffer.from(raw).toString("base64url");
 
