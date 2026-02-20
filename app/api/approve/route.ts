@@ -28,10 +28,9 @@ export async function POST(request: Request) {
     });
     const confirmPlain = htmlToPlainText(confirmHtml);
 
-    // Use the proposal's HTML reply (with all 3 slots) if this is the initial send,
-    // or the confirmation HTML if a slot was selected
-    const htmlBody = proposal.htmlReply || confirmHtml;
-    const plainBody = proposal.draftReply || confirmPlain;
+    // Always send the confirmation email (single selected slot, not all 3 proposed)
+    const htmlBody = confirmHtml;
+    const plainBody = confirmPlain;
 
     // Create the calendar event
     const event = await createEvent(

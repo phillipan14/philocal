@@ -11,6 +11,7 @@ export function buildSchedulingReplyHtml({
   slots,
   closing,
   senderName = "Phillip",
+  slotsHeader,
 }: {
   recipientName: string;
   greeting: string;
@@ -18,6 +19,7 @@ export function buildSchedulingReplyHtml({
   slots: TimeSlot[];
   closing: string;
   senderName?: string;
+  slotsHeader?: string;
 }): string {
   const slotRows = slots
     .map(
@@ -44,7 +46,7 @@ export function buildSchedulingReplyHtml({
 
     ${context ? `<p style="font-size: 15px; margin: 0 0 20px 0;">${context}</p>` : ""}
 
-    <p style="font-size: 15px; margin: 0 0 12px 0; font-weight: 500;">Here are a few times that work for me:</p>
+    <p style="font-size: 15px; margin: 0 0 12px 0; font-weight: 500;">${slotsHeader ?? (slots.length === 1 ? "Meeting details:" : "Here are a few times that work for me:")}</p>
 
     <table cellpadding="0" cellspacing="0" style="width: 100%; border: 1px solid #e8e8e6; border-radius: 8px; border-collapse: separate; margin: 0 0 20px 0; overflow: hidden;">
       ${slotRows}
